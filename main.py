@@ -47,20 +47,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_username = context.bot.username
 
     if mentions:
-        # Check if someone other than this bot was tagged
         other_mentions = [m for m in mentions if m.lstrip("@").lower() != bot_username.lower()]
         if other_mentions:
             return
 
-    # Clean bot username from message text if mentioned
     clean_text = text.replace(f"@{bot_username}", "").strip()
     if not clean_text:
         clean_text = text
 
     try:
-        # Request response using updated stable Groq API model
+        # Request response using Groq API (llama-3.3-70b-versatile)
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": clean_text}
@@ -73,7 +71,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logging.error(f"Error calling Groq API: {e}")
-        # Send error feedback directly to Telegram if API fails
         await message.reply_text(f"[System Error]: Couldn't generate response. Details: {e}")
 
 if __name__ == '__main__':
