@@ -4,6 +4,12 @@ from groq import Groq
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
+# Logging setup for debugging on Render
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
 # Retrieve tokens from environment variables
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -41,18 +47,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_username = context.bot.username
 
     if mentions:
+        # Check if someone other than this bot was tagged
         other_mentions = [m for m in mentions if m.lstrip("@").lower() != bot_username.lower()]
         if other_mentions:
             return
 
+    # Clean bot username from message text if mentioned
     clean_text = text.replace(f"@{bot_username}", "").strip()
     if not clean_text:
         clean_text = text
 
     try:
-        # Request response using Groq API (llama-3.3-70b-versatile or llama-3.1-8b-instant)
+        # Request response using updated stable Groq API model
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": clean_text}
@@ -64,13 +72,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text(reply_text)
 
     except Exception as e:
-        print(f"Error calling Groq API: {e}")
+        logging.error(f"Error calling Groq API: {e}")
+        # Send error feedback directly to Telegram if API fails
+        await message.reply_text(f"[System Error]: Couldn't generate response. Details: {e}")
 
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    if not TELEGRAM_BOT_TOKEN or not GROQ_API_KEY:
+        print("ERROR: Environment variables TELEGRAM_BOT_TOKEN or GROQ_API_KEY are missing!")
+    else:
+        app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    print("Alya Bot is running with Groq API...")
-    app.run_polling()
+        print("Alya Bot is running successfully with Groq API...")
+        app.run_polling()
