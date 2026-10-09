@@ -52,8 +52,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         clean_text = text
 
     try:
+        # Groq-এর সব অ্যাকাউন্টেই সাপোর্ট করে এমন মডেল
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": clean_text}
