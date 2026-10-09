@@ -1,15 +1,15 @@
 import os
 import logging
-from openai import OpenAI
+from groq import Groq
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Retrieve tokens from environment variables
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Initialize Groq client
+client = Groq(api_key=GROQ_API_KEY)
 
 SYSTEM_PROMPT = """
 You are Alya (Alisa Mikhailovna Kujou) from the anime 'Alya Sometimes Hides Her Feelings in Russian'. 
@@ -35,27 +35,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = message.text
-    chat_type = message.chat.type  # 'private', 'group', or 'supergroup'
 
     # Rule: Ignore user-to-user mentions in groups
-    # Look for any word starting with '@'
     mentions = [word for word in text.split() if word.startswith("@")]
     bot_username = context.bot.username
 
     if mentions:
-        # Check if another user (not this bot) is mentioned
         other_mentions = [m for m in mentions if m.lstrip("@").lower() != bot_username.lower()]
         if other_mentions:
-            return  # Ignore if user mentioned someone else
+            return
 
-    # In group chats, optional: clean up the bot's tag from text if tagged
     clean_text = text.replace(f"@{bot_username}", "").strip()
     if not clean_text:
         clean_text = text
 
     try:
+        # Request response using Groq API (llama-3.3-70b-versatile or llama-3.1-8b-instant)
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": clean_text}
@@ -67,15 +64,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text(reply_text)
 
     except Exception as e:
-        print(f"Error calling OpenAI API: {e}")
+        print(f"Error calling Groq API: {e}")
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Handlers
     app.add_handler(CommandHandler("start", start))
-    # Handles all text messages in private chats and groups
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    print("Alya Bot is running...")
+    print("Alya Bot is running with Groq API...")
     app.run_polling()
