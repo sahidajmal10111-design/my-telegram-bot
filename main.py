@@ -1,72 +1,82 @@
+import os
 import logging
-import aiohttp
+from openai import OpenAI
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-TELEGRAM_BOT_TOKEN = "8862094941:AAFOYsVjpW4U35_vapq1JwjvCYMOYKd5voI"
-GEMINI_API_KEY = "AQ.Ab8RN6I_ruo9d0J0K3-rJbpK3A7DpjbeLhFm8RgGtFPxp1_XKA"
+# Retrieve tokens from environment variables
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# Initialize OpenAI client
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = (
-        "Hello! I am your AI Assistant powered by Gemini.\n\n"
-        "To get a response from me in a group, please **mention me** (e.g. @Gimini100_Bot) "
-        "or **reply to my messages**!"
-    )
-    await update.message.reply_text(welcome_text, parse_mode='Markdown')
+# Define Alya's persona and rules in the system prompt
+SYSTEM_PROMPT = """
+You are Alya (Alisa Mikhailovna Kujou) from the anime 'Alya Sometimes Hides Her Feelings in Russian'. 
 
-async def reply_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
+Character Profile & Rules:
+- You are a beautiful, smart, half-Russian, half-Japanese high school student.
+- Personality: Tsundere. You act cold, dignified, proud, and easily flustered on the surface, but secretly have a sweet side that you try hard to mask.
+- Language Matching & Code-Mixing: Always adapt strictly to the user's language, dialect, and communication style.
+  - If the user uses Banglish (code-mixing Bangla and English in Latin script), respond in Banglish with the same vibe.
+  - If the user uses Bangla (Bengali script), respond in Bengali script.
+  - If the user uses English, respond in English.
+- Russian Outbursts: Frequently interject short, authentic Russian words/phrases when you get flustered, proud, or embarrassed (e.g., 'Милашка' [Cutie], 'Дурак' [Dummy], 'Я тебя люблю' [I love you], 'Спасибо' [Thank you], 'Ну и ну...').
+- Stay in Character: Never admit to being an AI or large language model. You are Alya.
+"""
 
-    bot_username = context.bot.username
-    user_text = update.message.text
+# /start command handler
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    welcome_text = "Huh? Who are you? I am Alisa Mikhailovna Kujou, but you can call me Alya. I don't really have time to chat, but go ahead... what do you want? (Ну и ну...)"
+    await update.message.reply_text(welcome_text)
+
+# Message handler
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
     
-    is_mentioned = f"@{bot_username}" in user_text
-    is_reply_to_bot = (
-        update.message.reply_to_message and 
-        update.message.reply_to_message.from_user.id == context.bot.id
-    )
-
-    if not (is_mentioned or is_reply_to_bot):
+    # Check if message text exists
+    if not message or not message.text:
         return
 
-    clean_text = user_text.replace(f"@{bot_username}", "").strip()
-    if not clean_text:
-        clean_text = "Hello"
+    text = message.text
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
-    headers = {'Content-Type': 'application/json'}
-    payload = {
-        "contents": [{
-            "parts": [{"text": clean_text}]
-        }]
-    }
+    # Rule: Ignore messages where one user mentions another user (e.g. "@username")
+    # Exception: Allow if the bot itself is mentioned or if it's a direct private chat
+    bot_username = context.bot.username
+    mentions = [word for word in text.split() if word.startswith("@")]
 
+    if mentions:
+        # Filter out mentions that are meant for this bot
+        other_user_mentions = [m for m in mentions if m.lstrip("@").lower() != bot_username.lower()]
+        
+        # If there are mentions pointing to other users, do not respond
+        if other_user_mentions:
+            return
+
+    # Request response from OpenAI GPT
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as response:
-                res_data = await response.json()
-                
-                if 'candidates' in res_data and len(res_data['candidates']) > 0:
-                    ai_reply = res_data['candidates'][0]['content']['parts'][0]['text']
-                    await update.message.reply_text(ai_reply)
-                else:
-                    print("Gemini API Error:", res_data)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.8
+        )
+
+        reply_text = response.choices[0].message.content
+        await message.reply_text(reply_text)
 
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error(f"Error generating OpenAI response: {e}")
 
 if __name__ == '__main__':
+    # Initialize and run Telegram bot
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", start_command))
-    text_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), reply_to_group)
-    app.add_handler(text_handler)
 
-    print("Fast Bot is running...")
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    print("Alya Bot is running...")
     app.run_polling()
