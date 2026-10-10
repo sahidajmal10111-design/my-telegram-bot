@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 # Change via env var if Groq retires this model
-MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 
 client = Groq(api_key=GROQ_API_KEY)
 
@@ -61,7 +61,7 @@ def ask_groq(chat_id: int, user_text: str) -> str:
         model=MODEL,
         messages=messages,
         temperature=0.9,
-        max_tokens=300,
+        max_tokens=1024,
     )
     reply = resp.choices[0].message.content.strip()
     history[chat_id].append({"role": "assistant", "content": reply})
